@@ -1,0 +1,382 @@
+# EventLog Master
+
+popup beacon_bottom {
+    menu "EventLogMaster" {
+        menu "Helper" {
+            item "HelpInfo" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "EventLogMaster Helper Info");
+                    blog($1, "Author: whoam1@QAX-A-TEAM");
+                }
+            }
+            item "CheckNetVersion" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "CheckNetVersion for Powershell Get-WinEvent cmdlet.");
+                    bpowershell($1,"\$PSVersionTable.CLRVersion.Major");
+                    bpowershell($1, "dir 'HKLM:\\SOFTWARE\\Microsoft\\NET Framework Setup\\NDP'");
+                    blog($1, "if CheckNetVersion < 3.5, Please use 'wevtutil epl evtx' to xml.");
+                }
+            }
+            item "CheckRdpStatus" {
+                $dialog = dialog("Change RDP fDenyTSConnections status", %(fDenyTSConnections => "fDenyTSConnections"),lambda({
+                    $fDenyTSConnections = $3['fDenyTSConnections'];
+                    if ($fDenyTSConnections eq 'open') {
+                        $fDenyTSConnections = 0
+                    }
+                    if ($fDenyTSConnections eq 'close') {
+                        $fDenyTSConnections = 1
+                    }
+                    blog(@ids, "Change RDP fDenyTSConnections status to $fDenyTSConnections (0 open / 1 close)");
+                    bpowershell_import(@ids, script_resource("./powershell/RegfDenyTSConnections.ps1"));
+                    bpowerpick(@ids,"RegfDenyTSConnections $fDenyTSConnections");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                },@ids => $1));
+                drow_combobox($dialog, "fDenyTSConnections", "Change RDP fDenyTSConnections: ", @("open","close"));
+                dbutton_action($dialog, "Launch");
+                dialog_show($dialog);
+            }
+            menu "EvenlogService" {
+                item "KillEvenlogService" {
+                    local('$bid');
+                    foreach $bid ($1){
+                        blog($1, "Stop Eventlog Service to First Login RDP");
+                        bpowershell_import($bid, script_resource("./powershell/KillEvenlogService.ps1"));
+                        bpowerpick($bid,"KillEvenlogService");
+                    }                
+                }
+                item "StartEvenlogService" {
+                    local('$bid');
+                    foreach $bid ($1){
+                        blog($1, "Start Eventlog Service");
+                        bshell($bid,"net start eventlog");
+                    }                
+                }
+            }
+            menu "PowerShellExecutionPolicy" {
+                item "CheckPSExecutionPolicy" {
+                    local('$bid');
+                    foreach $bid ($1){
+                        blog($1, "Check PowerShell ExecutionPolicy(.Default:Restricted)");
+                        bpowerpick($bid,"get-Executionpolicy");
+                    }
+                }
+                item "EnablePSRemoteSigned" {
+                    local('$bid');
+                    foreach $bid ($1){
+                        blog($1, "Change PowerShell ExecutionPolicy to RemoteSigned(.Default:Restricted)");
+                        bpowerpick($bid,"get-Executionpolicy");
+                        bpowerpick($1,"Set-Itemproperty -path 'Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\PowerShell\\1\\ShellIds\\Microsoft.PowerShell' -Name 'ExecutionPolicy' -value 'RemoteSigned'");
+                        bpowerpick($bid,"get-Executionpolicy");
+                    }
+                }
+                item "EnablePSUnrestricted" {
+                    local('$bid');
+                    foreach $bid ($1){
+                        blog($1, "Change PowerShell ExecutionPolicy to Unrestricted(.Default:Restricted)");
+                        bpowerpick($bid,"get-Executionpolicy");
+                        bpowerpick($1,"Set-Itemproperty -path 'Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\PowerShell\\1\\ShellIds\\Microsoft.PowerShell' -Name 'ExecutionPolicy' -value 'Unrestricted'");
+                        bpowerpick($bid,"get-Executionpolicy");
+                    }
+                }
+                item "EnablePSRestricted" {
+                    local('$bid');
+                    foreach $bid ($1){
+                        blog($1, "Change PowerShell ExecutionPolicy to Restricted(.Default:Restricted)");
+                        bpowerpick($bid,"get-Executionpolicy");
+                        bpowerpick($1,"Set-Itemproperty -path 'Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\PowerShell\\1\\ShellIds\\Microsoft.PowerShell' -Name 'ExecutionPolicy' -value 'Restricted'");
+                        bpowerpick($bid,"get-Executionpolicy");
+                    }
+                }
+            }
+        }
+        menu "Search" {
+            item "RdpLogPath" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get NT event log path %SystemRoot%+filename ");
+                    bshell($1,"wmic nteventlog get path\,filename\,writeable");
+                }
+            }
+            item "RegRdpPort" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Check Rdp Open Port");
+                    bpowershell_import($bid, script_resource("./powershell/RegRdpPort.ps1"));
+                    bpowerpick($bid,"RegRdpPort");
+                    #bpowershell($bid,"RegRdpPort");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "RegSecMaxSize" {
+                $dialog = dialog("Change Security EventLog MaxSize", %(MaxSize => "MaxSize", "EventLogType" => "EventLogType"),lambda({
+                    $MaxSize = $3['MaxSize'];
+                    $EventLogType = $3['EventLogType'];
+                    blog(@ids, "Change $EventLogType EventLog MaxSize to $MaxSize M");
+                    bpowershell_import(@ids, script_resource("./powershell/RegSecMaxSize.ps1"));
+                    bpowerpick(@ids,"RegSecMaxSize $EventLogType $MaxSize");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                },@ids => $1));
+                drow_combobox($dialog, "MaxSize", "Change MaxSize (M):", @("20","50", "100", "200","1000"));
+                drow_combobox($dialog, "EventLogType", "Select EventLogType:", @("Security","RemoteConnectionManager", "LocalSessionManager"));
+                dbutton_action($dialog, "Launch");
+                dialog_show($dialog);
+            }
+            item "RegClientHostName" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP Client HostName");
+                    bpowershell_import($bid, script_resource("./powershell/RegClientHostName.ps1"));
+                    bpowerpick($bid,"RegClientHostName");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "RegRdcServer" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDC server:port & Credentials");
+                    bpowershell_import($bid, script_resource("./powershell/RegRdcServer.ps1"));
+                    bpowerpick($bid,"RegRdcServer");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "EventLogSuccess" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP Login Success Event (ID=4624&Type=10)");
+                    bpowershell_import($bid, script_resource("./powershell/EventLogSuccess.ps1"));
+                    bpowerpick($bid,"EventLogSuccess");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "EventLogSuccessWevtutil" {
+                prompt_confirm("PowerShell Get-WinEvent cmdlet not work(.net Version < 3.5).","GO ?",lambda({
+                    blog(@ids, "Get RDP Login Success Event (ID=4624&Type=10) with Wevtutil");
+                    bshell(@ids,"wevtutil epl Security ./Sec_.evtx /ow:true");
+                    bpowershell_import(@ids, script_resource("./powershell/EventLogSuccessWevtutil.ps1"));
+                    bpowerpick(@ids,"EventLogSuccessWevtutil");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                    brm(@ids,"Sec_.evtx");
+                },@ids => $1));
+            }
+            item "EventLogCredentials" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP Login Success Event (ID=4648)");
+                    bpowershell_import($bid, script_resource("./powershell/EventLogCredentials.ps1"));
+                    bpowerpick($bid,"EventLogCredentials");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "EventLogFailed" {
+                prompt_confirm("FailedLog Maybe more than MaxSize. Suggest Use EventLogFailedLogParser. Maybe Wait a second.","GO ?",lambda({
+                    blog(@ids, "Get RDP Login Failed Event (ID=4625&Type=10/3)");
+                    bpowershell_import(@ids, script_resource("./powershell/EventLogFailed.ps1"));
+                    bpowerpick(@ids,"EventLogFailed");
+                },@ids => $1));
+            }
+            item "EventLogFailedLogParser" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($bid, "Get RDP Login Failed Event (ID=4625&Type=10/3) with LogParser. Default: LoginFailIp,Times Top line. Tips: Times < 5 Maybe administrator True SourceIp");
+                    bupload($bid, script_resource("./logparser/LogParser.exe"));
+                    bshell($bid,"LogParser.exe -stats:OFF -i:EVT \"SELECT EXTRACT_TOKEN(Strings, 19, '|') AS SourceIP,COUNT(SourceIP) AS Times INTO RDPLoginFail.csv FROM Security WHERE EventID IN ('4625') AND SourceIP NOT IN ('-') GROUP BY SourceIP ORDER BY Times desc\" -o:CSV");
+                    # bshell($bid,"LogParser.exe -stats:OFF -i:EVT \"SELECT TimeGenerated,EXTRACT_TOKEN(Strings, 5, '|') as Username, EXTRACT_TOKEN(Strings, 19, '|') AS SourceIP ,EXTRACT_TOKEN(Strings, 20, '|') AS Sport INTO RDPLoginFail.csv FROM Security WHERE EventID IN ('4625')\" -o:CSV");
+                    bshell($bid,"type RDPLoginFail.csv");
+                    # bshell($1,"for /f \"tokens=1* delims=:\" %i in ('findstr/n .* RDPLoginFail.csv')do @if %i leq 10 (echo.%j)");
+                    # cat RDPLoginFail.csv | awk -F "," '{print $3}' | uniq -c |sort
+                    # bdownload($bid,"RDPLoginFail.csv");
+                    brm($bid,"LogParser.exe");
+                    brm($bid,"RDPLoginFail.csv");
+                }
+            }
+            item "RemoteConnectionManager" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP TerminalServices RemoteConnectionManager EventLog (ID=1149)");
+                    bpowershell_import($bid, script_resource("./powershell/RemoteConnectionManager.ps1"));
+                    bpowerpick($bid,"RemoteConnectionManager");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "LocalSessionManager" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP TerminalServices LocalSessionManager EventLog (ID=21&22&24&25)");
+                    bpowershell_import($bid, script_resource("./powershell/LocalSessionManager.ps1"));
+                    bpowerpick($bid,"LocalSessionManager");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "ClientActiveXCore" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP TerminalServices ClientActiveXCore EventLog (ID=1024)");
+                    bpowershell_import($bid, script_resource("./powershell/ClientActiveXCore.ps1"));
+                    bpowerpick($bid,"ClientActiveXCore");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "RdpCoreTS" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP RemoteDesktopServices RdpCoreTS EventLog (ID=131&140)");
+                    bpowershell_import($bid, script_resource("./powershell/RdpCoreTS.ps1"));
+                    bpowerpick($bid,"RdpCoreTS");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "FileDefaultRdp" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Get RDP Default.rdp File::full address)");
+                    bpowershell_import($bid, script_resource("./powershell/FileDefaultRdp.ps1"));
+                    bpowerpick($bid,"FileDefaultRdp");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "SearchAll" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "All in One : Search");
+                    bpowershell_import($bid, script_resource("./powershell/SearchAllEventLog.ps1"));
+                    bpowerpick($bid,"SearchAllEventLog");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+        }
+        menu "Clearn" {
+            item "EventRecordID" {
+                $dialog = dialog("Delete EventRecordID", %(EventRecordID => "1024", EventType => "Security"),lambda({
+                    $EventRecordID = $3['EventRecordID'];
+                    $EventType = $3['EventType'];
+                    $EventTypeFlag = $3['EventType'];
+                    if ($EventType eq 'RemoteConnectionManager') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+                    }
+                    if ($EventType eq 'LocalSessionManager') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+                    }
+                    if ($EventType eq 'ClientActiveXCore') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-RDPClient/Operational'
+                    }
+                    if ($EventType eq 'RdpCoreTS') {
+                        $EventType = 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational'
+                    }
+                    blog(@ids,"Delete EventLog where EventType = $EventType & EventRecordID = $EventRecordID");
+                    bpowershell_import(@ids,script_resource("./powershell/ClearnEventRecordID.ps1"));
+                    bpowerpick(@ids,"ClearnEventRecordID $EventType $EventTypeFlag $EventRecordID");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                },@ids => $1));
+                dialog_description($dialog, "Delete EventLog with EventRecordID");
+                drow_text($dialog, "EventRecordID",  "EventRecordID:");
+                drow_combobox($dialog, "EventType", "EventLog Type:", @("Security", "RemoteConnectionManager", "LocalSessionManager","ClientActiveXCore","RdpCoreTS"));
+                dbutton_action($dialog, "Launch");
+                dialog_show($dialog);
+            }
+            item "IpAddress" {
+                $dialog = dialog("Delete IpAddress", %(IpAddress => "127.0.0.1", EventType => "Security"),lambda({
+                    $IpAddress = $3['IpAddress'];
+                    $EventType = $3['EventType'];
+                    $EventTypeFlag = $3['EventType'];
+                    if ($EventType eq 'RemoteConnectionManager') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+                    }
+                    if ($EventType eq 'LocalSessionManager') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+                    }
+                    if ($EventType eq 'ClientActiveXCore') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-RDPClient/Operational'
+                    }
+                    if ($EventType eq 'RdpCoreTS') {
+                        $EventType = 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational'
+                    }
+                    blog(@ids,"Delete EventLog where EventType = $EventType & IpAddress = $IpAddress");
+                    bpowershell_import(@ids,script_resource("./powershell/ClearnIpAddress.ps1"));
+                    bpowerpick(@ids,"ClearnIpAddress $EventType $EventTypeFlag $IpAddress");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                },@ids => $1));
+                dialog_description($dialog, "Delete EventLog with IpAddress");
+                drow_text($dialog, "IpAddress",  "IpAddress:");
+                drow_combobox($dialog, "EventType", "EventLog Type:", @("Security", "RemoteConnectionManager", "LocalSessionManager","ClientActiveXCore","RdpCoreTS"));
+                dbutton_action($dialog, "Launch");
+                dialog_show($dialog);
+            }
+            item "RegName" {
+                prompt_text("RegPath","HKEY_USERS",lambda({
+                    blog(@ids,"Reg Delete: $1 /f");
+                    bshell(@ids,"reg delete \"$1\" /f");
+                    #bshell(@ids,"reg add \"$1\"");
+                },@ids => $1));
+            }
+            item "RegNamePS" {
+                prompt_text("RegPath With PowerShell","HKEY_USERS",lambda({
+                    blog(@ids,"Reg Delete with powershell");
+                    bpowershell_import(@ids,script_resource("./powershell/ClearnRegName.ps1"));
+                    bpowerpick(@ids,"ClearnRegName \"$1\"");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                },@ids => $1));
+            }
+            item "RegValue" {
+                $dialog = dialog("Delete Reg Path Value", %(RegPath => "HKEY_USERS", RegValue => "CLIENTNAME"),lambda({
+                    $RegPath = $3['RegPath'];
+                    $RegValue = $3['RegValue'];
+                    blog(@ids,"Delete Reg where RegPath = $RegPath & RegValue = $RegValue");
+                    bpowershell_import(@ids,script_resource("./powershell/ClearnRegValue.ps1"));
+                    bpowerpick(@ids,"ClearnRegValue \"$RegPath\" $RegValue");
+                    bshell(@ids,"wevtutil cl \"Windows PowerShell\"");
+                },@ids => $1));
+                drow_text($dialog, "RegPath",  "RegPath:",30);
+                drow_text($dialog, "RegValue",  "RegValue:",30);
+                dbutton_action($dialog, "Launch");
+                dialog_show($dialog);
+            }
+            item "DefaultRdp" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Clearn DefaultRdp File");
+                    bpowershell_import($bid,script_resource("./powershell/ClearnDefaultRdp.ps1"));
+                    bpowerpick($bid,"ClearnDefaultRdp");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "TempLog" {
+                local('$bid');
+                foreach $bid ($1){
+                    blog($1, "Clearn TempLog File");
+                    bpowershell_import($bid,script_resource("./powershell/ClearnTempLog.ps1"));
+                    bpowerpick($bid,"ClearnTempLog");
+                    bshell($bid,"wevtutil cl \"Windows PowerShell\"");
+                }
+            }
+            item "ClearnAll" {
+                $dialog = dialog("Clearn All Eventlog", %(EventType => "AllEvent"),lambda({
+                    $EventType = $3['EventType'];
+                    if ($EventType eq 'RemoteConnectionManager') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+                    }
+                    if ($EventType eq 'LocalSessionManager') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+                    }
+                    if ($EventType eq 'ClientActiveXCore') {
+                        $EventType = 'Microsoft-Windows-TerminalServices-RDPClient/Operational'
+                    }
+                    if ($EventType eq 'RdpCoreTS') {
+                        $EventType = 'Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational'
+                    }
+                    if ($EventType eq 'AllEvent'){
+                        blog(@ids, "Clearn All Eventlog");
+                        bshell(@ids,"for /f %i in (\'wevtutil el\') do @(wevtutil cl \"%i\")");
+                    }else{
+                        blog(@ids,"Clearn $EventType Eventlog ");
+                        bshell(@ids,"wevtutil cl \"$EventType\"");
+                    }
+                },@ids => $1));
+                drow_combobox($dialog, "EventType", "EventLog Type:", @("AllEvent","Security", "Application", "Setup","System","RemoteConnectionManager", "LocalSessionManager","ClientActiveXCore","RdpCoreTS"));
+                dbutton_action($dialog, "Launch");
+                dialog_show($dialog);
+            }
+        }
+    }
+}
